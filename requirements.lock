@@ -1,0 +1,13 @@
+# Direct pins only; a complete transitive lock remains a release gate.
+fastapi==0.115.12
+pydantic==2.11.4
+pydantic-settings==2.9.1
+SQLAlchemy==2.0.40
+alembic==1.15.2
+httpx==0.28.1
+beautifulsoup4==4.13.4
+uvicorn==0.34.2
+pytest==8.3.5
+ruff==0.11.8
+anyio==4.9.0
+starlette==0.46.2

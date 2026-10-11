@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply m-0 bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    font-family: system-ui, sans-serif;
+  }
+  input {
+    @apply dark:border-slate-500 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-400;
+  }
+  a, summary {
+    @apply dark:text-blue-300;
+  }
+  button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible {
+    @apply outline outline-2 outline-offset-4 outline-blue-700 dark:outline-blue-300;
+  }
+  [role="alert"] {
+    @apply text-red-800 dark:text-red-300;
+  }
+}
+
+@layer utilities {
+  .dark .text-slate-600 {
+    @apply text-slate-300;
+  }
+  .dark .text-amber-800, .dark .text-amber-900 {
+    @apply text-amber-300;
+  }
+  .dark .text-red-800 {
+    @apply text-red-300;
+  }
+  .dark .recharts-cartesian-axis-tick-value {
+    fill: theme('colors.slate.300');
+  }
+  .dark .recharts-line-curve {
+    stroke: theme('colors.blue.400');
+  }
+  .dark .recharts-default-tooltip {
+    background-color: theme('colors.slate.800') !important;
+    border-color: theme('colors.slate.500') !important;
+    color: theme('colors.slate.100') !important;
+  }
+  .dark .recharts-tooltip-item {
+    color: theme('colors.blue.300') !important;
+  }
+}

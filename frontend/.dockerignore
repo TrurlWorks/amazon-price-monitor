@@ -1,0 +1,7 @@
+node_modules
+dist
+*.tsbuildinfo
+.env*
+# rsync nie usuwa starych plików z serwera; wyklucz wycofany widok z obrazu.
+src/Dashboard.tsx
+src/Dashboard.test.tsx
