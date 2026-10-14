@@ -1,6 +1,6 @@
 # Amazon Price Monitor
 
-**Version: 0.8.4** · Self-hosted Amazon.pl price tracking for a trusted local network.
+**Version: 0.8.5** · Self-hosted Amazon.pl price tracking for a trusted local network.
 
 Amazon Price Monitor is a web application for recording product price observations, reviewing price history and scheduling checks of product pages on Amazon.pl. It uses **Python/FastAPI**, **React/TypeScript**, **SQLite** and **Docker Compose**.
 

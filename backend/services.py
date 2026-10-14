@@ -75,8 +75,8 @@ class ProductService:
             return self.provider.offer_at(asin, observation)
         return await self.provider.get_offer(asin)
 
-    def add_queued(self, url: str) -> Product:
-        """Persist a placeholder and its first check without contacting Amazon."""
+    def add_queued(self, url: str, *, immediate: bool = False) -> Product:
+        """Persist a product and reserve its first check when requested."""
         parsed = parse_amazon_url(url)
         if self.products.get_by_asin(parsed.asin) is not None:
             raise DuplicateProduct()
@@ -85,7 +85,13 @@ class ProductService:
             enqueue(
                 self.session, product, kind="manual", due_at=naive_utc(utcnow()),
             )
-            self.session.commit()
+            if immediate:
+                # The new slot is claimed before commit, so the worker cannot
+                # take it between creation and the first direct read.
+                if not begin_direct(self.session, product.id, naive_utc(utcnow())):
+                    raise RefreshInProgress()
+            else:
+                self.session.commit()
             return product
         except IntegrityError:
             self.session.rollback()
@@ -95,6 +101,15 @@ class ProductService:
         except Exception:
             self.session.rollback()
             raise
+
+    async def add_now(self, url: str) -> Product:
+        product = self.add_queued(url, immediate=True)
+        try:
+            return await self._run_direct(product.id, retry_on_failure=True)
+        except ProviderError:
+            # Creation succeeds even when Amazon rejects the first read. The
+            # queued retry and diagnostic outcome have already been committed.
+            return self.get(product.id)
 
     def queue_refresh(self, product_id: int) -> Product:
         product = self.get(product_id)
@@ -113,11 +128,14 @@ class ProductService:
         self.get(product_id)
         if not begin_direct(self.session, product_id, naive_utc(utcnow())):
             raise RefreshInProgress()
+        return await self._run_direct(product_id)
+
+    async def _run_direct(self, product_id: int, *, retry_on_failure: bool = False) -> Product:
         succeeded = False
         blocked = False
         outcome = "error"
         try:
-            product = await self.refresh(product_id)
+            product = await self.refresh(product_id, automated=retry_on_failure)
             succeeded = True
             outcome = "success"
             return product
@@ -128,7 +146,8 @@ class ProductService:
         finally:
             finish(
                 self.session, self.settings, product_id, "manual", naive_utc(utcnow()),
-                succeeded=succeeded, blocked=blocked, outcome=outcome, direct=True,
+                succeeded=succeeded, blocked=blocked, outcome=outcome,
+                direct=not retry_on_failure,
             )
 
     def record(self, product: Product, offer: OfferData) -> None:

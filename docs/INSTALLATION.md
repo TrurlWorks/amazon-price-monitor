@@ -1,4 +1,4 @@
-# Amazon Price Monitor 0.8.4 — instalacja i obsługa
+# Amazon Price Monitor 0.8.5 — instalacja i obsługa
 
 ## Wymagania
 

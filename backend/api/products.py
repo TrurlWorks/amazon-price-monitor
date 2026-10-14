@@ -95,8 +95,8 @@ ProductID = Annotated[int, Path(gt=0)]
 
 
 @router.post("", response_model=ProductResponse, status_code=201)
-async def add_product(body: AddProduct, service: Service):
-    return service.add_queued(body.url)
+async def add_product(body: AddProduct, service: Service, check_now: bool = True):
+    return await service.add_now(body.url) if check_now else service.add_queued(body.url)
 
 
 @router.get("", response_model=list[ProductResponse])

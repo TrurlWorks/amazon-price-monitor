@@ -1,4 +1,4 @@
-"""Amazon Price Monitor application entry point."""
+"""Local-AI-Lab entrypoint; Compose starts the ASGI factory directly."""
 
 import os
 

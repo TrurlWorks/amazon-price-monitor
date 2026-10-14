@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { expect, it } from 'vitest'
-import { PreviewDashboard, matchingSuggestions, refreshResultLabel, visiblePreviewRows } from './PreviewDashboard'
+import { PreviewDashboard, matchingSuggestions, refreshResultLabel, sortedPreviewRows, visiblePreviewRows } from './PreviewDashboard'
 import type { History, Product } from './products'
 
 it('reports a retrieved price only when the newest observation contains one', () => {
@@ -37,6 +37,22 @@ it('narrows existing products by name, ASIN and attention state', () => {
   }))
   expect(matchingSuggestions(many, '')).toHaveLength(25)
   expect(matchingSuggestions(many, 'produkt 25').map(row => row.product.id)).toEqual([25])
+
+  const sortable = [
+    { product: { ...base, title: 'Żelazko' }, history: { stats: { current: '10', change_amount: '-5' } } as History },
+    { product: { ...base, id: 2, title: 'Album', status: 'UNKNOWN' as const }, history: { stats: { current: null, change_amount: null } } as History },
+    { product: { ...base, id: 3, title: 'Monitor', is_active: false }, history: { stats: { current: '20', change_amount: '5' } } as History },
+    { product: { ...base, id: 4, title: 'Ładowarka' }, history: { stats: { current: '15', change_amount: '0' } } as History },
+  ]
+  const ids = (key: 'product' | 'price' | 'change' | 'status', direction: 'asc' | 'desc') =>
+    sortedPreviewRows(sortable, key, direction).map(row => row.product.id)
+  expect(ids('product', 'asc')).toEqual([2, 4, 3, 1])
+  expect(ids('price', 'asc')).toEqual([1, 4, 3, 2])
+  expect(ids('price', 'desc')).toEqual([3, 4, 1, 2])
+  expect(ids('change', 'asc')).toEqual([1, 4, 3, 2])
+  expect(ids('change', 'desc')).toEqual([3, 4, 1, 2])
+  expect(ids('status', 'asc')).toEqual([1, 4, 2, 3])
+  expect(ids('status', 'desc')).toEqual([3, 2, 1, 4])
 })
 
 it('keeps adding products and the saved display mode in the live dashboard', () => {
@@ -50,7 +66,7 @@ it('keeps adding products and the saved display mode in the live dashboard', () 
     consecutive_failures: 0, automatic_failures: 0, consecutive_not_found: 0,
   } satisfies Product])
   client.setQueryData(['settings'], {
-    application_version: '0.8.4', display_mode: 'tiles', product_provider: 'mock',
+    application_version: '0.8.5', display_mode: 'tiles', product_provider: 'mock',
     amazon_credentials_configured: false, poll_interval_seconds: 3600,
     failed_retry_seconds: 90, status: 'ok', product_count: 1, snapshot_count: 0,
   })
@@ -63,6 +79,10 @@ it('keeps adding products and the saved display mode in the live dashboard', () 
   expect(render()).toContain('href="#/products/1"')
   expect(render()).toContain('src="https://example.test/product.jpg"')
   expect(render()).toContain('Sprawdź teraz')
+  expect(render()).toMatch(/aria-label="Pokaż: Monitorowane produkty" aria-pressed="true"/)
+  expect(render()).toMatch(/aria-label="Pokaż: Spadek od początku" aria-pressed="false"/)
+  expect(render()).toMatch(/aria-label="Pokaż: Wymagają uwagi" aria-pressed="false"/)
+  expect(render()).not.toContain('aria-label="Pokaż: Ostatnia próba odczytu"')
   expect(render()).toMatch(/aria-pressed="true"[^>]*>Kafelki/)
   client.setQueryData(['settings'], {
     ...client.getQueryData<object>(['settings']), display_mode: 'table',
@@ -76,6 +96,9 @@ it('keeps adding products and the saved display mode in the live dashboard', () 
   expect(table).toContain('title="Słuchawki bezprzewodowe z bardzo długą nazwą produktu"')
   expect(table).toContain('src="https://example.test/product.jpg"')
   expect(table).toContain('Odczyt')
+  expect(table).toContain('aria-sort="ascending"')
+  expect(table).toContain('aria-label="Sortuj: Cena"')
+  expect(table).toContain('aria-label="Sortowanie produktów"')
   expect(table.match(/Sprawdź teraz/g)).toHaveLength(2)
   client.setQueryData<Product[]>(['products'], previous => previous?.map(item => ({
     ...item, is_active: false, automatic_failures: 3, pause_reason: 'automatic',

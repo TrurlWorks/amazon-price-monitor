@@ -41,7 +41,7 @@ class SettingsAPITests(TestCase):
 
     def test_safe_contract_and_live_counts(self):
         expected = {
-            "application_version": "0.8.4",
+            "application_version": "0.8.5",
             "display_mode": "tiles",
             "product_provider": "mock",
             "amazon_credentials_configured": True,
@@ -67,7 +67,7 @@ class SettingsAPITests(TestCase):
         product_ids = []
         for asin in ("B012345678", "B012345679"):
             response = self.client.post(
-                "/api/products", json={"url": f"https://amazon.pl/dp/{asin}"},
+                "/api/products?check_now=false", json={"url": f"https://amazon.pl/dp/{asin}"},
             )
             self.assertEqual(response.status_code, 201, response.text)
             product_ids.append(response.json()["id"])

@@ -18,8 +18,9 @@ from backend.amazon_page_provider import AmazonPageProvider
 from backend.config import Settings
 from backend.main import create_app
 from backend.mock_provider import MockAmazonProvider
-from backend.models import PriceSnapshot, Product, RefreshRequest
+from backend.models import AcquisitionAttempt, PriceSnapshot, Product, RefreshRequest, naive_utc, utcnow
 from backend.providers import (
+    AmazonBlocked,
     Availability,
     ProductNotFound,
     ProviderError,
@@ -65,7 +66,7 @@ class ProductAPITests(TestCase):
         self.client = self.enterContext(TestClient(self.app))
 
     def add(self):
-        response = self.client.post("/api/products", json={"url": URL})
+        response = self.client.post("/api/products?check_now=false", json={"url": URL})
         self.assertEqual(response.status_code, 201, response.text)
         self.assertEqual(response.json()["queue_state"], "manual")
         self.run_queue()
@@ -188,7 +189,7 @@ class ProductAPITests(TestCase):
             app = create_app(settings, provider)
             with TestClient(app) as client:
                 if product_id is None:
-                    response = client.post("/api/products", json={"url": URL})
+                    response = client.post("/api/products?check_now=false", json={"url": URL})
                     self.assertEqual(response.status_code, 201, response.text)
                     product_id = response.json()["id"]
                 else:
@@ -240,7 +241,7 @@ class ProductAPITests(TestCase):
         self.assertEqual(self.client.get("/api/health").status_code, 200)
 
     def test_add_and_repeated_manual_checks_share_one_queued_request(self):
-        response = self.client.post("/api/products", json={"url": URL})
+        response = self.client.post("/api/products?check_now=false", json={"url": URL})
         self.assertEqual(response.status_code, 201)
         product_id = response.json()["id"]
         path = f"/api/products/{product_id}"
@@ -255,6 +256,43 @@ class ProductAPITests(TestCase):
         self.run_queue()
         self.assertEqual(self.provider.observations["B012345678"], 1)
         self.assertEqual(len(self.history(product_id)["snapshots"]), 1)
+
+    def test_add_reads_immediately_and_schedules_the_next_regular_check(self):
+        response = self.client.post("/api/products", json={"url": URL})
+        self.assertEqual(response.status_code, 201, response.text)
+        product = response.json()
+        self.assertEqual(product["queue_state"], "regular")
+        self.assertIsNotNone(product["last_checked_at"])
+        self.assertEqual(self.provider.observations[product["asin"]], 1)
+        self.assertEqual(len(self.history(product["id"])["snapshots"]), 1)
+        with Session(self.app.state.database) as session:
+            request = session.get(RefreshRequest, product["id"])
+            self.assertGreater(request.due_at, naive_utc(utcnow()))
+            self.assertEqual(session.query(AcquisitionAttempt).count(), 1)
+        self.run_queue()
+        self.assertEqual(self.provider.observations[product["asin"]], 1)
+
+    def test_blocked_first_read_keeps_product_and_queues_a_delayed_retry(self):
+        self.provider.error = AmazonBlocked("private challenge detail")
+        response = self.client.post("/api/products", json={"url": URL})
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertNotIn("private challenge detail", response.text)
+        product = response.json()
+        self.assertEqual(product["queue_state"], "retry")
+        self.assertEqual(product["consecutive_failures"], 1)
+        self.assertEqual(product["automatic_failures"], 1)
+        self.assertEqual(self.history(product["id"])["snapshots"], [])
+        with Session(self.app.state.database) as session:
+            request = session.get(RefreshRequest, product["id"])
+            self.assertGreater(request.due_at, naive_utc(utcnow()))
+            attempt = session.scalar(select(AcquisitionAttempt))
+            self.assertEqual(attempt.outcome, "blocked")
+            request.due_at = naive_utc(utcnow())
+            session.commit()
+        self.provider.error = None
+        self.run_queue()
+        self.assertEqual(len(self.history(product["id"])["snapshots"]), 1)
+        self.assertEqual(self.client.get(f"/api/products/{product['id']}").json()["queue_state"], "regular")
 
     def test_refresh_all_routes_are_unavailable(self):
         routes = {route.path for route in self.app.routes}
@@ -287,7 +325,7 @@ class ProductAPITests(TestCase):
             for error in (ProductNotFound, ProviderUnavailable, TransientProviderError):
                 with self.subTest(operation=operation, error=error):
                     setattr(self.provider, operation, error("private information"))
-                    response = self.client.post("/api/products", json={"url": URL})
+                    response = self.client.post("/api/products?check_now=false", json={"url": URL})
                     self.assertEqual(response.status_code, 201)
                     self.assertNotIn("private information", response.text)
                     self.run_queue()
@@ -303,7 +341,7 @@ class ProductAPITests(TestCase):
         self.add()
 
     def test_snapshot_write_failure_keeps_product_without_observation(self):
-        response = self.client.post("/api/products", json={"url": URL})
+        response = self.client.post("/api/products?check_now=false", json={"url": URL})
         self.assertEqual(response.status_code, 201)
         with patch(
             "backend.services.SQLAlchemySnapshotRepository.append",

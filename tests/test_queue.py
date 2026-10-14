@@ -40,7 +40,7 @@ class QueueDiagnosticsTests(TestCase):
 
     def add(self, asin="B012345678"):
         response = self.client.post(
-            "/api/products", json={"url": f"https://amazon.pl/dp/{asin}"},
+            "/api/products?check_now=false", json={"url": f"https://amazon.pl/dp/{asin}"},
         )
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()["id"]

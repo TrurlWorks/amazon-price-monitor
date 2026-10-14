@@ -13,7 +13,7 @@ it('loads public settings, offers retry on failure and never renders credential 
     <QueryClientProvider client={client}><Settings /></QueryClientProvider>,
   )
   const data: SettingsResponse = {
-    application_version: '0.8.4',
+    application_version: '0.8.5',
     display_mode: 'tiles',
     product_provider: 'mock',
     amazon_credentials_configured: false,
@@ -49,7 +49,7 @@ it('loads public settings, offers retry on failure and never renders credential 
     ])
     const html = render()
     for (const text of ['Źródło danych</dt><dd>Dane testowe', 'skonfigurowane</dt><dd>Nie',
-      'Wersja aplikacji</dt><dd>0.8.4', 'Zapisz ustawienia', 'step="any"',
+      'Wersja aplikacji</dt><dd>0.8.5', 'Zapisz ustawienia', 'step="any"',
       'href="#/settings/queue"',
       'Widok produktów</dt><dd>Kafelki', 'value="table"',
       'Odstęp między sprawdzeniami (godziny)</dt><dd>1', 'Stan API</dt><dd>Odpowiada',
@@ -77,7 +77,7 @@ it('converts displayed hours and minutes to whole API seconds', () => {
 
 it('sends only editable settings in the PUT request', async () => {
   const updated: SettingsResponse = {
-    application_version: '0.8.4', display_mode: 'table', product_provider: 'mock',
+    application_version: '0.8.5', display_mode: 'table', product_provider: 'mock',
     amazon_credentials_configured: false, poll_interval_seconds: 7200,
     failed_retry_seconds: 120, status: 'ok', product_count: 0, snapshot_count: 0,
   }

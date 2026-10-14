@@ -4,6 +4,7 @@ const section = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shad
 const link = 'font-medium text-blue-700 underline underline-offset-4 dark:text-blue-300'
 
 const releases = [
+  { version: '0.8.5', changes: 'Dodano sortowanie tabeli po produkcie, cenie, zmianie ceny i stanie. Nowy produkt jest sprawdzany od razu; po błędzie ponowna próba trafia do kolejki.' },
   { version: '0.8.4', changes: 'Zwężono tabelę produktów; kliknięcie dowolnego miejsca wiersza wybiera produkt, a przycisk „Sprawdź teraz” nadal wykonuje odczyt.' },
   { version: '0.8.3', changes: 'Dodano bezpośrednie sprawdzanie cen w kafelkach i tabeli oraz wynik odczytu przy produkcie.' },
   { version: '0.8.2', changes: 'Dodano tę instrukcję użytkownika i odnośnik Info w nawigacji.' },
@@ -32,8 +33,8 @@ export function InfoPage() {
         <h2 id="start-heading" className="text-xl font-bold">Pierwsze kroki</h2>
         <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-6 text-slate-700 dark:text-slate-300">
           <li>Na stronie <a href="#/" className={link}>Produkty</a> wklej adres produktu Amazon.pl w formacie <span className="break-all font-mono">https://www.amazon.pl/dp/ASIN</span> i dodaj go do monitorowania. ASIN to 10 znaków identyfikujących produkt.</li>
-          <li>Produkt pojawi się na liście od razu. Pierwsza cena pojawi się po odczycie wykonanym przez kolejkę; do tego czasu zobaczysz „Brak ceny”.</li>
-          <li>Wyszukuj po nazwie lub ASIN, wybierz liczbę produktów na stronie i przełącz układ „Kafelki” lub „Tabela”. Filtr „Wymagają uwagi” pokazuje między innymi produkty z błędem odczytu.</li>
+          <li>Przy dodawaniu aplikacja od razu podejmuje pierwszy odczyt. Jeśli nie powiedzie się, produkt zostanie na liście, a ponowna próba trafi do kolejki. Do uzyskania ceny zobaczysz „Brak ceny”.</li>
+          <li>Wyszukuj po nazwie lub ASIN, wybierz liczbę produktów na stronie i przełącz układ „Kafelki” lub „Tabela”. W tabeli kliknij nagłówek Produkt, Cena, Od początku lub Stan, aby sortować; kolejne kliknięcie odwraca kierunek. Brakujące ceny są na końcu. Filtr „Wymagają uwagi” pokazuje między innymi produkty z błędem odczytu.</li>
           <li>Użyj „Sprawdź teraz” przy produkcie w kafelkach lub tabeli, aby odczytać cenę bez czekania w kolejce. Po próbie zobaczysz wynik odczytu. Otwórz szczegóły produktu, aby zobaczyć wykres i historię cen, wstrzymać monitorowanie albo usunąć produkt wraz z historią.</li>
         </ol>
       </section>
@@ -43,7 +44,7 @@ export function InfoPage() {
         <p className="mt-4 text-sm leading-6 text-slate-700 dark:text-slate-300">W zwykłym trybie aplikacja pobiera po stronie serwera publiczną stronę produktu Amazon.pl pod kanonicznym adresem produktu. Odczytuje widoczną nazwę, zdjęcie, cenę w PLN, dostępność i sprzedawcę, jeśli te dane są rozpoznawalne. Nie korzysta z ceny wpisanej przez użytkownika ani z historii prezentowanej przez Amazon.</p>
         <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-300">Udany odczyt zapisuje nową obserwację, także gdy cena się nie zmieniła. Nieudany odczyt zapisuje wynik próby diagnostycznej, ale nie dopisuje ceny ani nie zastępuje ostatniej poprawnej obserwacji. Pusta cena może oznaczać, że strona została rozpoznana, lecz nie zawierała obsługiwanej ceny.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60"><h3 className="font-semibold">Automatycznie</h3><p className="mt-2 text-sm leading-6">Produkty trafiają do trwałej kolejki. Jeden worker sprawdza je kolejno, zachowując wspólny odstęp. Po błędzie wykonuje najwyżej dwa ponowienia; potem produkt wymaga uwagi i czeka na rzadszą próbę powrotu.</p></div>
+          <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60"><h3 className="font-semibold">Automatycznie</h3><p className="mt-2 text-sm leading-6">Po pierwszym odczycie przy dodaniu, kolejne sprawdzenia przechodzą przez trwałą kolejkę. Jeden worker wykonuje je kolejno, zachowując wspólny odstęp. Po błędzie wykonuje najwyżej dwa ponowienia; potem produkt wymaga uwagi i czeka na rzadszą próbę powrotu.</p></div>
           <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-800/60"><h3 className="font-semibold">Na żądanie</h3><p className="mt-2 text-sm leading-6">Przycisk „Sprawdź teraz” na liście i w szczegółach uruchamia pojedynczy odczyt bezpośrednio. Działa także dla produktu ręcznie wstrzymanego. Na liście zobaczysz, czy ostatnia próba zapisała cenę. Gdy cena nie została odczytana, poprzednia poprawna cena może nadal być widoczna jako bieżąca.</p></div>
         </div>
         <p className="mt-4 text-sm leading-6 text-slate-700 dark:text-slate-300">W <a href="#/settings/queue" className={link}>diagnostyce kolejki</a> zobaczysz zadany termin, szacowany plan startu i wyniki prób. Plan jest prognozą: nowe zlecenia, czas pobierania i przerwy po blokadach mogą go przesunąć. Możesz jednorazowo zmienić termin najbliższej próby produktu.</p>
@@ -67,7 +68,7 @@ export function InfoPage() {
         <ul className="mt-4 list-disc space-y-3 pl-5 text-sm leading-6 text-slate-700 dark:text-slate-300">
           <li>Amazon może zwrócić stronę weryfikacyjną lub odmówić dostępu. Rozpoznana strona weryfikacyjna ma wynik „Blokada Amazon”; inne nieudane odpowiedzi mogą mieć wynik „Błąd”. W obu przypadkach poprzednia poprawna cena pozostaje bez zmian. Samo wejście na stronę produktu w przeglądarce nie dowodzi, że serwer aplikacji otrzyma tę samą odpowiedź.</li>
           <li>Gdy w ciągu godziny strony weryfikacyjne dotyczą dwóch różnych produktów, kolejka robi wspólną przerwę i później podejmuje próbę kontrolną. Produkt po powtarzających się błędach trafia do „Wymagających uwagi” i ma rzadsze próby powrotu. Nie znamy bezpiecznego limitu żądań Amazon; ta ochrona nie gwarantuje odczytu.</li>
-          <li>„Sprawdź teraz” uruchamia odczyt bez czekania na kolejkę, także podczas jej przerwy. Powtarzanie go wiele razy może zwiększyć ryzyko kolejnej blokady. Aplikacja nie rozwiązuje CAPTCHA i nie obchodzi ograniczeń serwisu.</li>
+          <li>Dodanie produktu i „Sprawdź teraz” uruchamiają odczyt bez czekania na kolejkę, także podczas jej przerwy. Wiele takich żądań w krótkim czasie może zwiększyć ryzyko kolejnej blokady. Aplikacja nie rozwiązuje CAPTCHA i nie obchodzi ograniczeń serwisu.</li>
           <li>Widoczna cena może zależeć od sprzedawcy, dostępności, promocji, dostawy lub personalizacji. Aplikacja zapisuje rozpoznaną cenę ze strony produktu, nie oblicza kuponów i kosztów dostawy. Zmiana struktury strony może uniemożliwić odczyt.</li>
           <li>Aplikacja nie wysyła powiadomień. Nie ma też logowania ani szyfrowania połączenia HTTPS w obecnej konfiguracji; używaj jej wyłącznie w zaufanej sieci.</li>
         </ul>

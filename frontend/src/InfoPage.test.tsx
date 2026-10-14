@@ -8,7 +8,7 @@ it('opens the Polish user guide through the info route and shared navigation', (
     'href="#/info"', 'href="#/settings"', 'Ciemny motyw',
     'Jak działa Monitor cen', 'Pierwsze kroki', 'Skąd pochodzą dane',
     'Ustawienia', 'Ograniczenia i blokada odczytu przez Amazon',
-    'Historia zmian wersji', '0.8.4', '0.8.3', '0.8.2', '0.8.1', '0.8.0', '0.7.0',
+    'Historia zmian wersji', '0.8.5', '0.8.4', '0.8.3', '0.8.2', '0.8.1', '0.8.0', '0.7.0',
     'Sprawdź teraz', 'Blokada Amazon', 'diagnostyce kolejki',
   ]) expect(html).toContain(text)
   expect(html).toContain('id="odczyt"')

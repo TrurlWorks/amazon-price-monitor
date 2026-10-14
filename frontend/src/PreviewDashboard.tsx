@@ -8,6 +8,8 @@ import { ProductThumbnail } from './ProductThumbnail'
 
 type PreviewRow = { product: Product, history?: History, loading?: boolean, error?: boolean, retry?: () => void }
 type Segment = 'all' | 'drops' | 'attention' | 'paused'
+type SortKey = 'product' | 'price' | 'change' | 'status'
+type SortDirection = 'asc' | 'desc'
 
 const statusNames: Record<Product['status'], string> = {
   ACTIVE: 'Dostępny', UNAVAILABLE: 'Niedostępny',
@@ -77,6 +79,30 @@ function needsAttention(row: PreviewRow): boolean {
     row.product.automatic_failures >= 3 ||
     row.product.status === 'UNKNOWN' || row.product.status === 'NOT_FOUND' ||
     (row.history !== undefined && numeric(row.history.stats.current) === null)
+}
+
+function tableStatus(row: PreviewRow): string {
+  return !row.product.is_active ? 'Wstrzymany' : needsAttention(row) ? 'Sprawdź' : statusNames[row.product.status]
+}
+
+export function sortedPreviewRows(rows: PreviewRow[], key: SortKey, direction: SortDirection): PreviewRow[] {
+  const collator = new Intl.Collator('pl-PL', { sensitivity: 'base', numeric: true })
+  const factor = direction === 'asc' ? 1 : -1
+  return [...rows].sort((left, right) => {
+    if (key === 'price' || key === 'change') {
+      const first = key === 'price' ? numeric(left.history?.stats.current) : priceChange(left.history)
+      const second = key === 'price' ? numeric(right.history?.stats.current) : priceChange(right.history)
+      if (first === null || second === null) {
+        if (first !== second) return first === null ? 1 : -1
+      } else if (first !== second) return (first - second) * factor
+    } else {
+      const first = key === 'product' ? left.product.title || left.product.asin : tableStatus(left)
+      const second = key === 'product' ? right.product.title || right.product.asin : tableStatus(right)
+      const comparison = collator.compare(first, second) * factor
+      if (comparison !== 0) return comparison
+    }
+    return left.product.id - right.product.id
+  })
 }
 
 export function visiblePreviewRows(rows: PreviewRow[], search: string, segment: Segment): PreviewRow[] {
@@ -165,11 +191,13 @@ function AddProductForm() {
           onChange={event => { setUrl(event.target.value); setValidation(''); add.reset() }}
           placeholder="https://www.amazon.pl/dp/B012345678"
           className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
-        <button type="submit" disabled={add.isPending} className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{add.isPending ? 'Dodawanie…' : 'Dodaj do monitorowania'}</button>
+        <button type="submit" disabled={add.isPending} className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{add.isPending ? 'Dodawanie i odczyt…' : 'Dodaj do monitorowania'}</button>
       </div>
       <p id="url-help" className="mt-2 text-xs text-slate-500 dark:text-slate-400">Obsługiwane są adresy HTTPS /dp/ i /gp/product/. Krótkie linki nie są obsługiwane.</p>
       {error && <p id="url-error" role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
-      {add.isSuccess && <p role="status" className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">Produkt dodany. Pierwsze sprawdzenie jest w kolejce.</p>}
+      {add.isSuccess && <p role="status" className={`mt-2 text-sm ${add.data.consecutive_failures > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{add.data.consecutive_failures > 0
+        ? 'Produkt dodany. Pierwszy odczyt nie powiódł się; ponowna próba jest w kolejce.'
+        : 'Produkt dodany. Pierwszy odczyt zakończony; kolejne sprawdzenie jest zaplanowane.'}</p>}
     </form>
   </section>
 }
@@ -183,6 +211,7 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
 }) {
   const [search, setSearch] = useState('')
   const [segment, setSegment] = useState<Segment>('all')
+  const [sort, setSort] = useState<{ key: SortKey, direction: SortDirection }>({ key: 'product', direction: 'asc' })
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [pageSize, setPageSize] = useState(10)
   const [page, setPage] = useState(1)
@@ -190,9 +219,10 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
   const [activeSuggestion, setActiveSuggestion] = useState(0)
   const suggestionList = useRef<HTMLUListElement>(null)
   const visible = visiblePreviewRows(rows, search, segment)
-  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
+  const ordered = displayMode === 'table' ? sortedPreviewRows(visible, sort.key, sort.direction) : visible
+  const pageCount = Math.max(1, Math.ceil(ordered.length / pageSize))
   const currentPage = Math.min(page, pageCount)
-  const pageRows = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const pageRows = ordered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const selected = pageRows.find(row => row.product.id === selectedId) ?? pageRows[0]
   const suggestions = matchingSuggestions(rows, search)
   useEffect(() => {
@@ -216,6 +246,35 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
   const chips: { key: Segment, label: string }[] = [
     { key: 'all', label: 'Wszystkie' }, { key: 'drops', label: 'Spadek od początku' },
     { key: 'attention', label: 'Wymagają uwagi' }, { key: 'paused', label: 'Wstrzymane' },
+  ]
+  const selectSegment = (next: Segment, clearSearch = false) => {
+    if (clearSearch) {
+      setSearch('')
+      setSuggestionsOpen(false)
+      setActiveSuggestion(0)
+    }
+    setSegment(next)
+    setPage(1)
+    setSelectedId(null)
+  }
+  const selectSort = (key: SortKey, direction: SortDirection) => {
+    setSort({ key, direction })
+    setPage(1)
+    setSelectedId(null)
+  }
+  const sortButton = (key: SortKey, label: string) => <button type="button"
+    onClick={() => selectSort(key, sort.key === key && sort.direction === 'asc' ? 'desc' : 'asc')}
+    className="inline-flex items-center gap-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
+    aria-label={`Sortuj: ${label}`}>
+    {label}<span aria-hidden="true">{sort.key === key ? sort.direction === 'asc' ? '↑' : '↓' : '↕'}</span>
+  </button>
+  const sortAria = (key: SortKey) => sort.key === key
+    ? sort.direction === 'asc' ? 'ascending' as const : 'descending' as const : 'none' as const
+  const summary: { label: string, value: string, hint: string, segment?: Segment }[] = [
+    { label: 'Monitorowane produkty', value: String(rows.length), hint: 'Wszystkie pozycje na liście', segment: 'all' },
+    { label: 'Spadek od początku', value: String(drops), hint: 'Bieżąca cena niższa od pierwszej', segment: 'drops' },
+    { label: 'Wymagają uwagi', value: String(attention), hint: 'Błąd, brak ceny lub nieznany status', segment: 'attention' },
+    { label: 'Ostatnia próba odczytu', value: timeLabel(latestCheck), hint: 'Najpóźniejszy czas sprawdzenia produktu' },
   ]
   const points = selected?.history?.snapshots.map(snapshot => ({
     time: utcDate(snapshot.checked_at).getTime(), price: numeric(snapshot.price),
@@ -245,18 +304,26 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
         </div>
       </div>
 
-      <dl className="mt-7 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {[
-          ['Monitorowane produkty', String(rows.length), 'Wszystkie pozycje na liście'],
-          ['Spadek od początku', String(drops), 'Bieżąca cena niższa od pierwszej'],
-          ['Wymagają uwagi', String(attention), 'Błąd, brak ceny lub nieznany status'],
-          ['Ostatnia próba odczytu', timeLabel(latestCheck), 'Najpóźniejszy czas sprawdzenia produktu'],
-        ].map(([label, value, hint]) => <div key={label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/40 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none">
-          <dt className="text-sm text-slate-600 dark:text-slate-300">{label}</dt>
-          <dd className={`mt-3 break-words font-semibold tracking-tight tabular-nums ${label === 'Ostatnia próba odczytu' ? 'text-base sm:text-xl' : 'text-2xl'}`}>{value}</dd>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{hint}</p>
-        </div>)}
-      </dl>
+      <div className="mt-7 grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Podsumowanie produktów">
+        {summary.map(card => {
+          const target = card.segment
+          const content = <>
+            <span className="block text-sm text-slate-600 dark:text-slate-300">{card.label}</span>
+            <span className={`mt-3 block break-words font-semibold tracking-tight tabular-nums ${card.segment ? 'text-2xl' : 'text-base sm:text-xl'}`}>{card.value}</span>
+            <span className="mt-2 block text-xs text-slate-500 dark:text-slate-400">{card.hint}</span>
+          </>
+          const style = 'w-full rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm shadow-slate-200/40 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none'
+          return target ? <button key={card.label} type="button" aria-label={`Pokaż: ${card.label}`}
+            aria-pressed={segment === target}
+            onClick={() => {
+              selectSegment(target, true)
+              document.getElementById('preview-list-heading')?.scrollIntoView({ behavior: 'smooth' })
+            }}
+            className={`${style} cursor-pointer hover:border-blue-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 dark:hover:border-blue-500 ${segment === target ? 'border-blue-400 dark:border-blue-500' : ''}`}>
+            {content}
+          </button> : <div key={card.label} className={style}>{content}</div>
+        })}
+      </div>
 
       <AddProductForm />
 
@@ -309,7 +376,7 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
           </div>
           <div role="group" aria-label="Filtr produktów" className="mt-5 flex flex-wrap gap-2">
             {chips.map(chip => <button key={chip.key} type="button" aria-pressed={segment === chip.key}
-              onClick={() => { setSegment(chip.key); setPage(1); setSelectedId(null) }}
+              onClick={() => selectSegment(chip.key)}
               className={`rounded-full px-3.5 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700 ${segment === chip.key ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200'}`}>{chip.label}</button>)}
           </div>
           <div role="group" aria-label="Widok produktów" className="mt-5 flex flex-wrap items-center gap-2 text-sm">
@@ -349,6 +416,19 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
             </article>
           })}
         </div>}
+        {visible.length > 0 && displayMode === 'table' && <label className="flex items-center gap-2 px-4 pt-4 text-sm md:hidden">Sortuj według
+          <select aria-label="Sortowanie produktów" value={`${sort.key}:${sort.direction}`}
+            onChange={event => {
+              const [key, direction] = event.target.value.split(':') as [SortKey, SortDirection]
+              selectSort(key, direction)
+            }}
+            className="min-w-0 rounded-lg border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-950">
+            <option value="product:asc">Produkt: A–Z</option><option value="product:desc">Produkt: Z–A</option>
+            <option value="price:asc">Cena: rosnąco</option><option value="price:desc">Cena: malejąco</option>
+            <option value="change:asc">Od początku: spadek</option><option value="change:desc">Od początku: wzrost</option>
+            <option value="status:asc">Stan: A–Z</option><option value="status:desc">Stan: Z–A</option>
+          </select>
+        </label>}
         {visible.length > 0 && displayMode === 'table' && <div className="grid min-w-0 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,1fr)]">
           <div className="min-w-0 divide-y divide-slate-100 dark:divide-slate-800 md:hidden">
             {pageRows.map(row => {
@@ -363,7 +443,7 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
                   <span className="min-w-0 flex-1"><span title={row.product.title || row.product.asin} className="line-clamp-2 break-words font-semibold">{row.product.title || row.product.asin}</span><span className="block truncate text-xs text-slate-500 dark:text-slate-400">{row.product.asin}</span></span>
                 </span>
                 <span className="mt-3 flex min-w-0 flex-wrap items-center justify-between gap-2">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${needsAttention(row) ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : !row.product.is_active ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>{!row.product.is_active ? 'Wstrzymany' : needsAttention(row) ? 'Sprawdź' : statusNames[row.product.status]}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${needsAttention(row) ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : !row.product.is_active ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>{tableStatus(row)}</span>
                   <span className="font-semibold tabular-nums">{row.loading ? 'Wczytywanie…' : row.history ? displayMoney(row.history.stats.current) : 'Brak danych'}</span>
                 </span>
                 <span className={`mt-2 block text-sm tabular-nums ${change === null ? 'text-slate-500' : change < 0 ? 'text-emerald-700 dark:text-emerald-300' : change > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500'}`}>Od początku: {change === null ? '—' : `${change < 0 ? '↓ ' : change > 0 ? '↑ ' : ''}${displayMoney(row.history?.stats.change_amount)}`}</span>
@@ -377,7 +457,7 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
               <caption className="sr-only">Przegląd zapisanych cen produktów</caption>
               <colgroup><col className="w-[36%]" /><col className="w-[17%]" /><col className="w-[16%]" /><col className="w-[13%]" /><col className="w-[18%]" /></colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-                <tr><th scope="col" className="py-3 pl-4 pr-1">Produkt</th><th scope="col" className="py-3 pl-1 pr-2 text-right">Cena</th><th scope="col" className="px-2 py-3 text-right">Od początku</th><th scope="col" className="px-2 py-3">Stan</th><th scope="col" className="px-2 py-3">Odczyt</th></tr>
+                <tr><th scope="col" aria-sort={sortAria('product')} className="py-3 pl-4 pr-1">{sortButton('product', 'Produkt')}</th><th scope="col" aria-sort={sortAria('price')} className="py-3 pl-1 pr-2 text-right">{sortButton('price', 'Cena')}</th><th scope="col" aria-sort={sortAria('change')} className="px-2 py-3 text-right">{sortButton('change', 'Od początku')}</th><th scope="col" aria-sort={sortAria('status')} className="px-2 py-3">{sortButton('status', 'Stan')}</th><th scope="col" className="px-2 py-3">Odczyt</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {pageRows.map(row => {
@@ -400,7 +480,7 @@ function PreviewLayout({ rows, loading = false, error = false, retryProducts,
                     </th>
                     <td className="whitespace-nowrap py-4 pl-1 pr-2 text-right font-semibold tabular-nums">{row.loading ? 'Wczytywanie…' : row.history ? displayMoney(row.history.stats.current) : 'Brak danych'}</td>
                     <td className={`whitespace-nowrap px-2 py-4 text-right font-medium tabular-nums ${change === null ? 'text-slate-500' : change < 0 ? 'text-emerald-700 dark:text-emerald-300' : change > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-slate-500'}`}>{change === null ? '—' : `${change < 0 ? '↓ ' : change > 0 ? '↑ ' : ''}${displayMoney(row.history?.stats.change_amount)}`}</td>
-                    <td className="px-2 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${needsAttention(row) ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : !row.product.is_active ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>{!row.product.is_active ? 'Wstrzymany' : needsAttention(row) ? 'Sprawdź' : statusNames[row.product.status]}</span></td>
+                    <td className="px-2 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${needsAttention(row) ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : !row.product.is_active ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}>{tableStatus(row)}</span></td>
                     <td className="px-2 py-4"><RefreshNowButton product={row.product} /></td>
                   </tr>
                 })}
