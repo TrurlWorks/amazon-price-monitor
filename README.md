@@ -17,6 +17,58 @@ Amazon Price Monitor is a web application for recording product price observatio
 
 **Not included:** user authentication, built-in HTTPS/TLS, email alerts or push notifications. Price acquisition may fail due to changes in page layout, CAPTCHA, access controls or other issues; the application does not bypass these restrictions. Observed prices may omit personalization, coupons and delivery costs.
 
+
+
+<h2>📸 Screenshots</h2>
+
+<p>Click any screenshot to view it in full resolution.</p>
+
+<table>
+  <tr>
+    <th>01 — Table Dashboard</th>
+    <th>02 — Tile Dashboard</th>
+    <th>03 — Price History</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/user-attachments/assets/8989a555-4afd-4afb-afa9-e135935dde4e">
+        <img src="https://github.com/user-attachments/assets/8989a555-4afd-4afb-afa9-e135935dde4e" height="130" alt="Table Dashboard">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/user-attachments/assets/6beaf96a-822b-4ba8-a801-16a3b43f6c25">
+        <img src="https://github.com/user-attachments/assets/6beaf96a-822b-4ba8-a801-16a3b43f6c25" height="130" alt="Tile Dashboard">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/user-attachments/assets/a1146b43-e5c3-4076-9cfc-2119458b8333">
+        <img src="https://github.com/user-attachments/assets/a1146b43-e5c3-4076-9cfc-2119458b8333" height="130" alt="Price History">
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <th>04 — Queue Diagnostics</th>
+    <th>05 — Mobile View</th>
+    <th></th>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/user-attachments/assets/d68407ae-8fe1-4161-8575-11e0176defa2">
+        <img src="https://github.com/user-attachments/assets/d68407ae-8fe1-4161-8575-11e0176defa2" height="130" alt="Queue Diagnostics">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/user-attachments/assets/f6b7f1d2-5609-4b64-842c-6300ecef17f2">
+        <img src="https://github.com/user-attachments/assets/f6b7f1d2-5609-4b64-842c-6300ecef17f2" height="130" alt="Mobile View">
+      </a>
+    </td>
+    <td></td>
+  </tr>
+</table>
+
+
+
+
 ## Quick start (Docker)
 
 **Requirements:** Git, Docker Engine with Docker Compose v2, a free TCP port (8080 by default) and local disk space for SQLite data.
